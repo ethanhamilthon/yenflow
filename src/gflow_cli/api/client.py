@@ -18,9 +18,11 @@ import base64
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import replace as _dataclass_replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, Self, TypeVar, cast
@@ -365,13 +367,17 @@ class FlowApiClient:
         self,
         profile_dir: Path,
         *,
-        headless: bool = False,
+        headless: bool | None = None,
+        background: bool = False,
         settings: Settings | None = None,
         transport: FlowTransportStrategy | str | None = None,
         out_dir: Path | None = None,
     ) -> None:
+        if headless is None:
+            headless = True if background else False
         self.profile_dir = profile_dir
         self.headless = headless
+        self.background = background
         # Optional directory for debug screenshots when a generation step
         # fails on a selector. Propagated to the transport (see __aenter__)
         # so long-lived workers can diagnose a "Could not find ... CTA"
@@ -519,6 +525,11 @@ class FlowApiClient:
                 "--disable-dev-shm-usage",
             ],
         }
+        if self.background and not self.headless:
+            # Headed-but-minimized keeps Flow's own timers/network observers alive
+            # without stealing the operator's foreground window.
+            kwargs["args"].append("--start-minimized")
+            kwargs["args"].append("--window-position=20000,20000")
         if self.settings.har_path is not None:
             self.settings.har_path.parent.mkdir(parents=True, exist_ok=True)
             kwargs["record_har_path"] = str(self.settings.har_path)
@@ -1095,8 +1106,36 @@ class FlowApiClient:
     async def _launch_persistent_context(self, kwargs: JsonObject) -> BrowserContext:
         """Launch the persistent context; translate a launch-time crash into ProfileLockedError."""
         assert self._pw is not None
+        front_app: str | None = None
+        if self.background and not self.headless and sys.platform == "darwin":
+            try:
+                script = (
+                    'tell application "System Events" to get name of first process whose '
+                    "frontmost is true"
+                )
+                proc = subprocess.run(
+                    ["osascript", "-e", script],
+                    capture_output=True,
+                    text=True,
+                    timeout=1.0,
+                    check=False,
+                )
+                front_app = proc.stdout.strip() or None
+            except Exception:
+                pass
         try:
-            return await self._pw.chromium.launch_persistent_context(**kwargs)
+            ctx = await self._pw.chromium.launch_persistent_context(**kwargs)
+            if front_app and sys.platform == "darwin":
+                try:
+                    subprocess.run(
+                        ["osascript", "-e", f'tell application "{front_app}" to activate'],
+                        capture_output=True,
+                        timeout=1.0,
+                        check=False,
+                    )
+                except Exception:
+                    pass
+            return ctx
         except Exception as exc:
             if _is_target_closed(exc):
                 # A TargetClosedError at LAUNCH usually means the profile dir
@@ -2938,6 +2977,44 @@ class FlowApiClient:
         except Exception:
             logger.debug("health_check_failed", exc_info=True)
             return False
+
+    async def probe_video_capabilities(
+        self,
+        *,
+        request: GenerateVideoRequest,
+        project_id: str,
+        out_dir: Path | None = None,
+    ) -> JsonObject:
+        """Run one read-only UI capability probe for a batch session.
+
+        The transport owns cohort-specific selectors. Keeping this optional
+        preserves all existing transports: an unported transport reports
+        ``unknown`` instead of pretending the requested settings are usable.
+        """
+        if self.transport is None:
+            msg = "FlowApiClient.transport is None - call probe inside 'async with client'"
+            raise RuntimeError(msg)
+        page = await self._checkout_page()
+        try:
+            probe = getattr(self.transport, "probe_video_capabilities", None)
+            if not callable(probe):
+                return {
+                    "status": "unknown",
+                    "host": flow_host_kind(getattr(page, "url", "")),
+                    "reason": "transport has no capability probe",
+                }
+            probe_fn = cast(Callable[..., Awaitable[Any]], probe)
+            result = await probe_fn(
+                page,
+                request=request,
+                project_id=project_id,
+                out_dir=out_dir,
+            )
+            if not isinstance(result, dict):
+                return {"status": "unknown", "reason": "probe returned a non-object"}
+            return cast("JsonObject", result)
+        finally:
+            self._checkin_page(page)
 
     # --- Character entity API (issue #145) -----------------------------------
 

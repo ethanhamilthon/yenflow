@@ -11,6 +11,7 @@ import pytest
 from gflow_cli.auth.verification import (
     FlowSessionOutcome,
     FlowSessionStatus,  # noqa: F401 — imported to assert it's part of the public API
+    evaluate_migrated_app,
     evaluate_session_response,
     verify_flow_profile,
     verify_flow_session,
@@ -93,6 +94,39 @@ class TestEvaluateSessionResponse:
     def test_source_is_passed_through(self) -> None:
         status = evaluate_session_response(200, "{}", google_session=False, source="internal")
         assert status.source == "internal"
+
+
+class TestEvaluateMigratedApp:
+    def test_authenticated_editor_shell(self) -> None:
+        status = evaluate_migrated_app(
+            {
+                "url": "https://flow.google.com/",
+                "avatar_count": 1,
+                "signin_count": 0,
+                "editor_count": 2,
+                "email": "migrated@example.com",
+            },
+            google_session=True,
+            source="chrome",
+        )
+        assert status.authenticated
+        assert status.user_email == "migrated@example.com"
+
+    def test_public_shell_stays_unverified(self) -> None:
+        status = evaluate_migrated_app(
+            {"url": "https://flow.google.com/about", "avatar_count": 0},
+            google_session=True,
+            source="chrome",
+        )
+        assert status.outcome is FlowSessionOutcome.GOOGLE_SESSION_ONLY
+
+    def test_foreign_origin_fails_closed(self) -> None:
+        status = evaluate_migrated_app(
+            {"url": "https://example.com/", "avatar_count": 1, "editor_count": 1},
+            google_session=True,
+            source="chrome",
+        )
+        assert status.outcome is FlowSessionOutcome.VERIFICATION_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +276,63 @@ class TestVerifyFlowSession:
         _, client_kwargs = fake_httpx.AsyncClient.call_args
         assert client_kwargs["cookies"] == {"__Secure-next-auth.session-token": "flow-session"}
         assert client_kwargs["follow_redirects"] is False
+
+    @pytest.mark.asyncio
+    async def test_migrated_editor_replaces_legacy_empty_session(self, gflow_home: Path) -> None:
+        profile = gflow_home / "profile_default"
+        profile.mkdir()
+        (profile / ".gflow_browser_strategy").write_text("chrome", encoding="utf-8")
+
+        fake_bc3 = MagicMock()
+        fake_bc3.chrome.return_value = [
+            SimpleNamespace(name="SAPISID", value="google", domain=".google.com"),
+        ]
+        fake_resp = MagicMock(status_code=200, text="{}")
+        fake_client = MagicMock()
+        fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+        fake_client.__aexit__ = AsyncMock(return_value=False)
+        fake_client.get = AsyncMock(return_value=fake_resp)
+        fake_httpx = MagicMock()
+        fake_httpx.AsyncClient.return_value = fake_client
+
+        page = MagicMock(url="https://flow.google.com/")
+        page.goto = AsyncMock()
+        page.wait_for_timeout = AsyncMock()
+        page.evaluate = AsyncMock(
+            return_value={
+                "url": "https://flow.google.com/",
+                "avatar_count": 1,
+                "signin_count": 0,
+                "editor_count": 1,
+                "email": "migrated@example.com",
+            }
+        )
+        ctx = MagicMock(pages=[page])
+        ctx.close = AsyncMock()
+        pw = MagicMock()
+        pw.chromium.launch_persistent_context = AsyncMock(return_value=ctx)
+        playwright_cm = MagicMock()
+        playwright_cm.__aenter__ = AsyncMock(return_value=pw)
+        playwright_cm.__aexit__ = AsyncMock(return_value=False)
+        fake_async_playwright = MagicMock(return_value=playwright_cm)
+
+        with (
+            patch("gflow_cli.auth.verification.get_settings") as mock_settings,
+            patch(
+                "gflow_cli.auth.cookies.get_cookies_path",
+                return_value=Path("/fake/Cookies"),
+            ),
+            patch.dict(sys.modules, {"browser_cookie3": fake_bc3, "httpx": fake_httpx}),
+            patch("gflow_cli.auth.strategies.async_playwright", fake_async_playwright),
+            patch("gflow_cli.browser_manager.ensure_profile_engine_compatible"),
+        ):
+            mock_settings.return_value.home = gflow_home
+            status = await verify_flow_profile(profile)
+
+        assert status.outcome is FlowSessionOutcome.AUTHENTICATED
+        assert status.user_email == "migrated@example.com"
+        page.goto.assert_awaited_once()
+        ctx.close.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_profile_outside_home_raises_security_error_httpx(self, gflow_home: Path) -> None:

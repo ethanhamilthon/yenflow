@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 import structlog
 from playwright.async_api import Error as PlaywrightError
@@ -12,7 +13,12 @@ from gflow_cli.errors import AuthBrowserRejectedError, AuthLoginTimeoutError, Se
 from gflow_cli.profile_lease import ProfileLease
 
 from .base import AuthStrategy
-from .verification import SESSION_API_URL, FlowSessionOutcome, evaluate_session_response
+from .verification import (
+    SESSION_API_URL,
+    FlowSessionOutcome,
+    evaluate_session_response,
+    probe_migrated_page,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,6 +29,16 @@ _console = Console()
 GEMINI_URL = "https://labs.google/fx/tools/flow?hl=en"
 GOOGLE_REJECTED_BROWSER_ROUTE = "accounts.google.com/v3/signin/rejected"
 POLL_INTERVAL_SECONDS = 3
+
+
+def _is_migrated_page(url: object) -> bool:
+    if not isinstance(url, str):
+        return False
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    return parsed.scheme == "https" and parsed.hostname == "flow.google.com"
 
 
 def login_launch_kwargs(
@@ -108,6 +124,28 @@ async def poll_session_until_authenticated(
 
             if _is_google_rejected_browser_page(page):
                 raise AuthBrowserRejectedError
+
+            if _is_migrated_page(page.url):
+                cookies = await ctx.cookies()
+                google_session = any(c.get("name") == "SAPISID" for c in cookies)
+                migrated = await probe_migrated_page(
+                    page,
+                    google_session=google_session,
+                    source=strategy_name,
+                )
+                if migrated.authenticated:
+                    logger.info(
+                        "auth_flow_session_verified",
+                        strategy=strategy_name,
+                        source=migrated.source,
+                        user_email=migrated.user_email,
+                        probe="migrated_dom",
+                    )
+                    success = True
+                    _email = migrated.user_email
+                    break
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                continue
 
             # Do not touch the session endpoint while a sign-in is in flight.
             # `/fx/api/auth/session` is a NextAuth route that can rotate session

@@ -208,6 +208,7 @@ def video_result(
             "mode": request.mode.value,
             "aspect": request.aspect.value,
             "duration": request.duration,
+            "resolution": request.resolution.value if request.resolution is not None else None,
             "count": request.count,
             "seed": request.seed,
         },

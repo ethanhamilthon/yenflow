@@ -1572,6 +1572,82 @@ class VideoGenerationMixin:
             log.debug("ui_automation_video.agent_toggle_probe_failed", error=str(e)[:80])
             return False
 
+    async def probe_video_capabilities(
+        self,
+        page: Page,
+        *,
+        request: GenerateVideoRequest,
+        project_id: str,
+        out_dir: Path | None = None,
+    ) -> _JsonObj:
+        """Read requested video controls once before a paid batch starts.
+
+        The probe opens only the existing settings surface and closes it again;
+        it never selects a model, attaches media, types a prompt, or clicks
+        submit. Cohort-specific migrated controls are delegated to their driver.
+        """
+        if flow_host_kind(page.url) == "migrated":
+            from gflow_cli.api.transports.migrated_composer import MigratedComposer  # noqa: PLC0415
+
+            return await MigratedComposer().probe_video_capabilities(
+                page, request, project_id=project_id
+            )
+        try:
+            await self._enter_editor(page, out_dir, project_id=project_id)
+        except FlowHostMigratedError:
+            from gflow_cli.api.transports.migrated_composer import MigratedComposer  # noqa: PLC0415
+
+            return await MigratedComposer().probe_video_capabilities(
+                page, request, project_id=project_id
+            )
+        await VideoGenerationMixin._wait_video_editor_ready(page)
+        await self._dismiss_blocking_overlays(page, out_dir)
+        if flow_host_kind(page.url) == "migrated":
+            from gflow_cli.api.transports.migrated_composer import MigratedComposer  # noqa: PLC0415
+
+            return await MigratedComposer().probe_video_capabilities(
+                page, request, project_id=project_id
+            )
+
+        host = flow_host_kind(page.url)
+        if host is None:
+            return {"status": "host_unported", "host": "unknown"}
+        try:
+            await VideoGenerationMixin._switch_to_video_mode(page, out_dir=out_dir)
+            labels: list[str] = []
+            for selector in ("[role='tab']:visible", "[role='radio']:visible"):
+                labels.extend(await page.locator(selector).all_text_contents())
+            joined = " ".join(labels).casefold()
+            required = [request.resolution.value.casefold()] if request.resolution else []
+            if request.duration is not None:
+                required.append(f"{request.duration}s")
+            aspect_label = {
+                Aspect.LANDSCAPE: "16:9",
+                Aspect.PORTRAIT: "9:16",
+                Aspect.SQUARE: "1:1",
+            }[request.aspect]
+            required.append(aspect_label)
+            if f"x{request.count}" not in joined and f"{request.count}x" not in joined:
+                required.append(f"x{request.count}")
+            missing = [value for value in required if value not in joined]
+            return {
+                "status": "available" if not missing else "unsupported",
+                "host": host,
+                "controls": {"labels": labels},
+                "missing": missing,
+            }
+        except Exception as exc:  # noqa: BLE001 - a probe must not mask its batch report
+            log.warning("ui_automation_video.capability_probe_failed", error=type(exc).__name__)
+            return {"status": "unknown", "host": host, "reason": type(exc).__name__}
+        finally:
+            # The method only opens the settings surface. Two Escapes cover the
+            # classic menu plus any stacked model/menu overlay without focusing it.
+            for _ in range(2):
+                try:
+                    await page.keyboard.press("Escape")
+                except Exception:  # noqa: BLE001 - teardown is best effort
+                    break
+
     @staticmethod
     async def _switch_to_video_mode(page: Page, *, out_dir: Path | None) -> None:
         """Open the 2-step mode dropdown and switch to Video mode. The menu
@@ -1818,6 +1894,46 @@ class VideoGenerationMixin:
         await tab.click()
         await page.wait_for_timeout(400)
         log.info("ui_automation_video.duration_set", seconds=seconds)
+
+    @staticmethod
+    async def _select_video_resolution(
+        page: Page,
+        resolution: str,
+        *,
+        out_dir: Path | None,
+    ) -> None:
+        """Select an explicit native video resolution before submission.
+
+        Resolution controls are cohort/model-dependent, just like duration. A
+        requested value that is not rendered is a pre-submit failure; falling
+        through to Flow's sticky default would make the saved media disagree
+        with the manifest.
+        """
+        tab = await VideoGenerationMixin._probe_selector_cascade(
+            page,
+            "resolution_tab",
+            tuple(
+                f"{role}:text-is('{resolution}')"
+                for role in ("[role='radio']", "[role='tab']", "[role='button']", "button")
+            )
+            + tuple(
+                f"{role}:has-text('{resolution}')"
+                for role in ("[role='radio']", "[role='tab']", "[role='button']", "button")
+            ),
+        )
+        if tab is None:
+            shot = await _capture_debug_screenshot(page, out_dir, "debug_no_resolution_tab.png")
+            raise UiSelectorDriftError(
+                selector_drift_detail(
+                    "resolution_tab",
+                    f"the {resolution} resolution control was not found on the Flow editor; "
+                    "refusing to proceed because Flow's default would violate the request.",
+                    shot,
+                )
+            )
+        await tab.click()
+        await page.wait_for_timeout(400)
+        log.info("ui_automation_video.resolution_set", resolution=resolution)
 
     @staticmethod
     async def _switch_video_sub_mode(page: Page, sub: str, *, out_dir: Path | None) -> None:

@@ -28,7 +28,13 @@ from gflow_cli.api.image import Aspect as ImageAspect
 from gflow_cli.api.image import GenerateImageRequest
 from gflow_cli.api.image import Model as ImageModel
 from gflow_cli.api.transports import migrated_composer
-from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode, VideoModel
+from gflow_cli.api.video import (
+    Aspect,
+    GenerateVideoRequest,
+    Mode,
+    VideoModel,
+    VideoResolution,
+)
 from gflow_cli.errors import (
     EXIT_CODE_MAP,
     ConfigurationError,
@@ -191,7 +197,7 @@ def _default_dom() -> Dom:
                 Radio("chrome_extension", "Ingredients"),
             ],
             "aspect": [Radio("crop_16_9", "16:9", checked=True), Radio("crop_9_16", "9:16")],
-            "resolution": [Radio("info", "360p"), Radio("", "720p", checked=True)],
+            "resolution": [Radio("", "360p"), Radio("", "720p", checked=True)],
             "duration": [
                 Radio("", "4s"),
                 Radio("", "6s"),
@@ -791,6 +797,15 @@ async def test_apply_video_settings_selects_each_axis_and_reads_back() -> None:
     assert page.dom.groups["duration"][1].checked  # 6s
     assert page.dom.groups["count"][1].checked  # x2
     assert not page.dom.pane_open  # closed afterwards
+
+
+async def test_apply_video_settings_selects_explicit_resolution() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    await MigratedComposer().apply_video_settings(page, _t2v(resolution=VideoResolution.P360))
+    assert page.dom.groups["resolution"][0].checked
+    assert not page.dom.groups["resolution"][1].checked
 
 
 async def test_the_consent_bar_is_cleared_on_the_video_path_too() -> None:

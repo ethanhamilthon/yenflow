@@ -32,7 +32,7 @@ from gflow_cli.api.image import AgentInstruction, GenerateImageRequest, ImageRef
 from gflow_cli.api.image import Aspect as ImageAspect
 from gflow_cli.api.image import Model as ImageModel
 from gflow_cli.api.video import Aspect as VideoAspect
-from gflow_cli.api.video import GenerateVideoRequest, VideoModel
+from gflow_cli.api.video import GenerateVideoRequest, VideoModel, VideoResolution
 from gflow_cli.api.video import Mode as VideoMode
 from gflow_cli.api.video import Tier as VideoTier
 from gflow_cli.config import UiMode
@@ -242,6 +242,8 @@ def build_video_request(payload: dict[str, Any]) -> GenerateVideoRequest:
     model = VideoModel.from_cli(model_val) if model_val else None
 
     duration = payload.get("duration")
+    resolution_val = payload.get("resolution")
+    resolution = VideoResolution.from_cli(resolution_val) if resolution_val else None
     count = payload.get("count", 1)
     seed = payload.get("seed")
 
@@ -281,6 +283,7 @@ def build_video_request(payload: dict[str, Any]) -> GenerateVideoRequest:
         tier=tier,
         model=model,
         duration=duration,
+        resolution=resolution,
         count=count,
         seed=seed,
         start_image=start_image,

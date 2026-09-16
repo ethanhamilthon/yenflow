@@ -458,3 +458,19 @@ The biggest single improvement to gflow-cli's scalability would be a **working p
 - An adapter to the **official** Veo API (`googleapis/python-genai`) as a parallel provider — that bypasses the headed-browser dependency entirely for users who have direct API access.
 
 If you ship any of the above, open an issue or a PR — this is the most strategic contribution any new collaborator can make to the project.
+
+## Private batch runner and serial transport boundary
+
+A private manifest runner lives in `src/gflow_cli/flow_batch.py` to drive multi-scene image-to-video (I2V) workflows. It is strictly internal and exposes no CLI flags or MCP tools (preserving the D13 review gate).
+
+### Key operational invariants
+
+- **Exact manifest execution:** Validates 1–10 scenes and exact settings (`mode`, `model`, `aspect`, `duration`, `resolution`, `count`) before browser launch. Path traversal in scene IDs and missing frame files are rejected up front.
+- **Background headed Chrome:** `FlowApiClient(background=True)` adds `--start-minimized` to headed Chrome; it never converts to headless mode or steals user focus via `bring_to_front`.
+- **Pre-submit capability probe:** Probes rendered UI controls (`360p`/`720p`, duration, aspect, count) once before starting generation, recording observed status (`available`, `unsupported`, `tier_locked`, `host_unported`, or `unknown`).
+- **Two-phase credit guard:** Persists `plan.json` with a canonical SHA-256 hash. The runner refuses paid submission until a matching `approval.json` (`{"approved": true, "plan_sha256": "..."}`) is present.
+- **Serial transport boundary:** Reuses `FlowApiClient.generate_video()` directly. The existing transport serializes submit-and-poll under its inner generation lock; the batch runner manages the outer FIFO queue (up to 5 active, up to 10 queued), pausing or cancelling pending jobs while preserving in-flight submissions.
+- **Checkpoint persistence & idempotent reconciliation:** Persists scene state atomically before paid submission (`submit_attempted`) and immediately upon handle observation (`remote_started`). If a connection drops, browser closes, or an outcome is indeterminate, the runner reconciles via `poll_video_status` using the canonical `media_id` (with nullable `operation_id`) and never blindly resubmits.
+- **Failure tolerance:** Technical preflight errors allow at most 1 automatic retry; post-submit errors are marked terminal or indeterminate. If the browser context closes, it restarts once to reconcile known handles.
+- **Native artifacts and optional enhancement:** Native MP4 clips are validated with `ffprobe`/`ffmpeg` and stitched into `final/native-stitched.mp4` via concat filter re-encoding. Optional enhancement is gated on live tier capability; unsupported enhancement completes with `partial_success`, leaving verified native outputs untouched.
+

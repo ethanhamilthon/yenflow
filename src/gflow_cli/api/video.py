@@ -132,6 +132,31 @@ class Aspect(StrEnum):
         return mapping[value]
 
 
+class VideoResolution(StrEnum):
+    """Native Flow video output resolution.
+
+    This is deliberately separate from image upscaling resolution. Flow's video
+    editor exposes these labels as ``360p`` and ``720p``; ``None`` on a request
+    keeps the legacy behaviour of accepting Flow's current default.
+    """
+
+    P360 = "360p"
+    P720 = "720p"
+
+    @classmethod
+    def from_cli(cls, value: str) -> VideoResolution:
+        key = value.strip().lower()
+        try:
+            return cls(key)
+        except ValueError as exc:
+            msg = f"Unsupported video resolution {value!r}; choose from 360p or 720p"
+            raise ValueError(msg) from exc
+
+    @property
+    def pixels(self) -> int:
+        return int(self.value.removesuffix("p"))
+
+
 # Flow's R2V reference cap is MODEL-DEPENDENT (live-verified + Google's
 # official support page): omni_flash allows 7 ("Maximum image ingredients
 # reached (7 allowed)"); veo_3_1_lite / veo_3_1_fast / veo_3_1_lite_lower_priority
@@ -243,6 +268,7 @@ class GenerateVideoRequest:
     tier: Tier = Tier.FAST  # meaningful for T2V only — I2V/R2V model keys are fixed
     model: VideoModel | None = None  # None -> Flow UI default (picker untouched)
     duration: int | None = None  # seconds: 4/6/8 (or 10, omni_flash only); None -> default
+    resolution: VideoResolution | None = None  # None -> Flow UI default
     count: int = 1  # 1-4 outputs; >1 multiplies credit cost
     seed: int | None = None
     start_image: Path | None = None  # I2V (local file path)
@@ -287,6 +313,7 @@ class GenerateVideoRequest:
     def __post_init__(self) -> None:
         self._validate_prompt()
         self._validate_duration()
+        self._validate_resolution()
         self._validate_count()
         self._validate_frame_ref_ids()
         self._validate_mode_symmetry()
@@ -400,6 +427,11 @@ class GenerateVideoRequest:
     def _validate_duration(self) -> None:
         if self.duration is not None and self.duration not in VIDEO_DURATION_CHOICES:
             msg = f"duration must be one of 4/6/8/10 seconds, got {self.duration}"
+            raise ValueError(msg)
+
+    def _validate_resolution(self) -> None:
+        if self.resolution is not None and not isinstance(self.resolution, VideoResolution):  # pyright: ignore[reportUnnecessaryIsInstance]
+            msg = f"resolution must be one of 360p/720p, got {self.resolution!r}"
             raise ValueError(msg)
 
     def _validate_count(self) -> None:

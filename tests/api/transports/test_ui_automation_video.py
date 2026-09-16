@@ -433,6 +433,21 @@ class TestSelectVideoDuration:
         page.screenshot.assert_awaited()
 
 
+class TestSelectVideoResolution:
+    @pytest.mark.asyncio
+    async def test_clicks_a_resolution_radio(self) -> None:
+        sel = "[role='radio']:text-is('360p')"
+        page = _cascade_page({sel})
+        await VideoGenerationMixin._select_video_resolution(page, "360p", out_dir=None)
+        page.locator.assert_any_call(sel)
+
+    @pytest.mark.asyncio
+    async def test_missing_resolution_refuses_to_use_flow_default(self) -> None:
+        page = _cascade_page(set())
+        with pytest.raises(UiSelectorDriftError, match="resolution_tab"):
+            await VideoGenerationMixin._select_video_resolution(page, "720p", out_dir=None)
+
+
 class TestRunStage:
     """`_run_stage` converts a wedged UI stage into a fast, named error.
 

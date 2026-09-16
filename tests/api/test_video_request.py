@@ -7,6 +7,7 @@ from gflow_cli.api.video import (
     GenerateVideoRequest,
     Mode,
     VideoModel,
+    VideoResolution,
     max_duration_for,
     reference_cap_for,
 )
@@ -66,6 +67,18 @@ def test_cap_budget_counts_entities_plus_images() -> None:
             reference_entities=("a", "b"),
             reference_images=(Path("x.png"), Path("y.png")),
         )
+
+
+def test_video_resolution_accepts_only_native_flow_values() -> None:
+    assert VideoResolution.from_cli(" 360P ") is VideoResolution.P360
+    assert VideoResolution.P720.pixels == 720
+    with pytest.raises(ValueError, match="resolution"):
+        VideoResolution.from_cli("1080p")
+
+
+def test_video_request_rejects_string_resolution() -> None:
+    with pytest.raises(ValueError, match="resolution"):
+        GenerateVideoRequest(prompt="x", resolution="360p")  # type: ignore[arg-type]
 
 
 def test_ui_mode_field_defaults_none_and_accepts_enum() -> None:

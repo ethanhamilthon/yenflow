@@ -523,7 +523,7 @@ def _unported_image_form(request: GenerateImageRequest) -> str | None:
 
 
 def _exact(label: str) -> re.Pattern[str]:
-    return re.compile(r"^\s*" + re.escape(label) + r"\s*$")
+    return re.compile(r"^\s*" + re.escape(label) + r"\s*$", re.MULTILINE)
 
 
 def _unique_display_name(image_path: Path) -> str:
@@ -842,6 +842,63 @@ class MigratedComposer:
             log.warning("migrated.agent_mode_chip_pressed_while_ready", issue_ref="#752")
         log.info("migrated.editor_ready", url=page.url)
 
+    async def probe_video_capabilities(
+        self,
+        page: Page,
+        request: GenerateVideoRequest,
+        *,
+        project_id: str,
+    ) -> dict[str, Any]:
+        """Read the current editor controls without submitting a generation."""
+        await self.ensure_editor(page, project_id)
+        pane = await self._open_pane(page)
+        try:
+            radio_text = await pane.locator(RADIO).all_text_contents()
+            model_text: list[str] = []
+            if request.model is not None:
+                button = pane.locator("button").filter(has=_ligature(page, "arrow_drop_down")).first
+                if await button.count():
+                    await button.click()
+                    model_text = await page.locator(MENU_ITEM).all_text_contents()
+            labels = [str(value) for value in radio_text]
+            joined = " ".join(labels).casefold()
+            missing: list[str] = []
+            if "video" not in joined:
+                missing.append("video mode")
+            if request.mode is Mode.I2V and "frames" not in joined:
+                missing.append("frames mode")
+            if request.aspect.value == "landscape" and "16:9" not in joined:
+                missing.append("16:9")
+            if request.aspect.value == "portrait" and "9:16" not in joined:
+                missing.append("9:16")
+            if request.resolution is not None and request.resolution.value.casefold() not in joined:
+                missing.append(request.resolution.value)
+            if request.duration is not None and f"{request.duration}s" not in joined:
+                missing.append(f"{request.duration}s")
+            if request.count not in (1, 2, 3, 4) or not any(
+                token in joined for token in (f"x{request.count}", f"{request.count}x")
+            ):
+                missing.append(f"x{request.count}")
+            if request.model is not None:
+                matcher = VIDEO_MODEL_MENU_MATCHERS.get(request.model)
+                if matcher is None or not any(matcher.matches(str(label)) for label in model_text):
+                    missing.append(request.model.value)
+            status = "available"
+            if missing:
+                status = (
+                    "tier_locked"
+                    if any("upgrade" in str(label).casefold() for label in (*labels, *model_text))
+                    else "unsupported"
+                )
+            return {
+                "status": status,
+                "host": "migrated",
+                "controls": {"radios": labels, "models": [str(v) for v in model_text]},
+                "missing": missing,
+            }
+        finally:
+            await self._close_pane(page, strict=False)
+
     @staticmethod
     async def _agent_chip_pressed(page: Page) -> bool | None:
         """Is Flow's agent-mode chip pressed right now? One count, and never the failure.
@@ -1084,6 +1141,8 @@ class MigratedComposer:
             if model is not None:
                 await self._select_model(page, pane, model)
             await self._select(page, pane, axis="aspect", lig=ASPECT_LIGATURE[request.aspect])
+            if request.resolution is not None:
+                await self._select(page, pane, axis="resolution", text=request.resolution.value)
             if request.duration is not None:
                 if request.mode is Mode.R2V and request.duration != R2V_DURATION_S:
                     raise ConfigurationError(
@@ -1318,13 +1377,25 @@ class MigratedComposer:
         target = matches.first
         if not await target.count():
             groups = await pane.locator(RADIOGROUP).count()
-            # Only the duration row is a per-account/model capability (#650) — a missing
-            # mode/aspect/count radio, or an empty pane, is the DOM having changed.
-            if axis != "duration" or groups == 0:
+            # Duration and resolution rows are per-account/model capabilities
+            # (#650). A missing mode/aspect/count radio, or an empty pane, is
+            # the DOM having changed.
+            if axis not in {"duration", "resolution"} or groups == 0:
                 raise UiSelectorDriftError(
                     detail=(
                         f"migrated host: no '{axis}' radio offering {wanted!r} in the settings "
                         f"pane ({groups} option groups rendered) (host=migrated)"
+                    ),
+                )
+            if axis == "resolution":
+                raise ConfigurationError(
+                    detail=(
+                        f"the migrated Flow host renders no resolution control offering "
+                        f"{wanted!r} for this account and model ({groups} option groups shown)"
+                    ),
+                    remediation_hint=(
+                        "Choose a resolution rendered by this Flow cohort, or omit the "
+                        "explicit resolution to accept Flow's default."
                     ),
                 )
             raise ConfigurationError(

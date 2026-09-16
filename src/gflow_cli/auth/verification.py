@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlsplit
 
 import structlog
 
@@ -33,12 +35,29 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
-# The NextAuth session endpoint. Expected authenticated 200 body shape:
-#   {"user": {"name": ..., "email": ..., "image": ...}, "expires": "..."}
-# An unauthenticated request returns `200 {}`. This contract is pinned by the
-# AUTHENTICATED_BODY fixture in tests/auth/test_verification.py — if Google
-# changes the shape, that test fails rather than the change going silent.
+# The legacy NextAuth session endpoint. It remains authoritative for the
+# labs cohort, but migrated accounts can receive `200 {}` here because their
+# usable session is the Google SSO session on flow.google.com.
 SESSION_API_URL = "https://labs.google/fx/api/auth/session"
+MIGRATED_APP_URL = "https://flow.google.com/?hl=en"
+_MIGRATED_PROBE_WAIT_MS = 5_000
+_MIGRATED_APP_PROBE_SCRIPT = """
+() => {
+  const body = document.body?.innerText || "";
+  const emails = body.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/ig) || [];
+  return {
+    url: location.href,
+    avatar_count: document.querySelectorAll("img[src*='googleusercontent.com']").length,
+    signin_count: document.querySelectorAll(
+      "a[href*='ServiceLogin'], a[href*='/signin'], [data-testid*='sign-in' i]"
+    ).length,
+    editor_count: document.querySelectorAll(
+      "flow-prompt-box, [contenteditable='true'], a[href*='/project/']"
+    ).length,
+    email: emails[0] || null,
+  };
+}
+"""
 
 # Per-request timeout for the session probe (milliseconds).
 _REQUEST_TIMEOUT_MS = 15_000
@@ -166,6 +185,78 @@ def evaluate_session_response(
     return _result(FlowSessionOutcome.VERIFICATION_ERROR)
 
 
+def evaluate_migrated_app(
+    snapshot: Mapping[str, Any],
+    *,
+    google_session: bool,
+    source: str,
+) -> FlowSessionStatus:
+    """Classify the rendered ``flow.google.com`` app without trusting cookies alone.
+
+    The migrated frontend has no NextAuth session endpoint shared with
+    ``labs.google``. A loaded account shell (avatar or editor/project anchors)
+    is the read-only oracle; sign-in/public landings are negative evidence.
+    """
+
+    def _result(outcome: FlowSessionOutcome, email: str | None = None) -> FlowSessionStatus:
+        return FlowSessionStatus(outcome=outcome, user_email=email, source=source)
+
+    url = snapshot.get("url")
+    if not isinstance(url, str):
+        return _result(FlowSessionOutcome.VERIFICATION_ERROR)
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return _result(FlowSessionOutcome.VERIFICATION_ERROR)
+    if parsed.scheme != "https" or parsed.hostname != "flow.google.com":
+        return _result(FlowSessionOutcome.VERIFICATION_ERROR)
+    if parsed.path.rstrip("/") == "/about" or int(snapshot.get("signin_count", 0) or 0) > 0:
+        return _result(
+            FlowSessionOutcome.GOOGLE_SESSION_ONLY
+            if google_session
+            else FlowSessionOutcome.NO_SESSION
+        )
+    try:
+        authenticated = (
+            int(snapshot.get("avatar_count", 0) or 0) > 0
+            or int(snapshot.get("editor_count", 0) or 0) > 0
+        )
+    except (TypeError, ValueError):
+        return _result(FlowSessionOutcome.VERIFICATION_ERROR)
+    if not authenticated:
+        return _result(
+            FlowSessionOutcome.GOOGLE_SESSION_ONLY
+            if google_session
+            else FlowSessionOutcome.NO_SESSION
+        )
+    email = snapshot.get("email")
+    return _result(FlowSessionOutcome.AUTHENTICATED, email if isinstance(email, str) else None)
+
+
+async def probe_migrated_page(page: Any, *, google_session: bool, source: str) -> FlowSessionStatus:
+    """Read the migrated app's rendered auth markers, never submit or mutate."""
+    try:
+        snapshot = await page.evaluate(_MIGRATED_APP_PROBE_SCRIPT)
+    except Exception as exc:  # noqa: BLE001 - auth probes fail closed
+        logger.warning("auth_migrated_dom_probe_error", source=source, error=type(exc).__name__)
+        return FlowSessionStatus(
+            outcome=FlowSessionOutcome.VERIFICATION_ERROR,
+            user_email=None,
+            source=source,
+        )
+    if not isinstance(snapshot, dict):
+        return FlowSessionStatus(
+            outcome=FlowSessionOutcome.VERIFICATION_ERROR,
+            user_email=None,
+            source=source,
+        )
+    return evaluate_migrated_app(
+        cast(Mapping[str, Any], snapshot),
+        google_session=google_session,
+        source=source,
+    )
+
+
 async def _fetch_session(ctx: BrowserContext) -> tuple[int, str]:
     """Fetch /api/auth/session, retrying transient failures.
 
@@ -244,6 +335,69 @@ async def fetch_flow_session_httpx(
     ) as client:
         status_code, body = await _fetch_session_httpx(client)
     return status_code, body, cookie_snapshot.google_session
+
+
+async def _verify_migrated_profile(
+    profile_dir: Path,
+    *,
+    google_session: bool,
+    source: str,
+) -> FlowSessionStatus | None:
+    """Verify the migrated frontend when the legacy BFF says ``{}``.
+
+    This is deliberately a browser DOM check, not a cookie-name heuristic: the
+    migrated editor's Google SSO session is scoped to ``google.com`` and the
+    labs NextAuth token cannot authenticate it. A failed fallback returns None
+    so the original fail-closed legacy verdict remains intact.
+    """
+    marker = profile_dir / ".gflow_browser_strategy"
+    channel: str | None = None
+    try:
+        if marker.read_text(encoding="utf-8").strip() == "chrome":
+            channel = "chrome"
+    except OSError:
+        pass
+    try:
+        from gflow_cli.browser_manager import ensure_profile_engine_compatible
+
+        from .strategies import async_playwright
+
+        async with ProfileLease(profile_dir):
+            ensure_profile_engine_compatible(profile_dir, channel)
+            async with async_playwright() as pw:
+                ctx = await pw.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_dir),
+                    channel=channel,
+                    headless=True,
+                    args=["--password-store=basic"],
+                )
+                try:
+                    page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+                    await page.goto(MIGRATED_APP_URL, wait_until="domcontentloaded", timeout=60_000)
+                    await page.wait_for_timeout(_MIGRATED_PROBE_WAIT_MS)
+                    result = await probe_migrated_page(
+                        page,
+                        google_session=google_session,
+                        source=source,
+                    )
+                finally:
+                    await ctx.close()
+    except Exception as exc:
+        logger.warning("auth_migrated_profile_probe_error", source=source, error=type(exc).__name__)
+        return None
+
+    if result.authenticated and not result.user_email:
+        try:
+            account = (profile_dir / ".gflow_account").read_text(encoding="utf-8").strip()
+        except OSError:
+            account = ""
+        if account:
+            result = FlowSessionStatus(
+                outcome=result.outcome,
+                user_email=account,
+                source=result.source,
+            )
+    return result
 
 
 async def verify_flow_session(
@@ -338,7 +492,9 @@ async def verify_flow_profile(
 
     Reads Chrome cookies directly from the SQLite store using browser_cookie3
     (falling back to a marker-gated Playwright context on decryption failure),
-    then calls the NextAuth session endpoint with up to `_MAX_ATTEMPTS` attempts.
+    then calls the legacy NextAuth session endpoint with up to `_MAX_ATTEMPTS` attempts.
+    If that endpoint returns an empty session, the migrated app gets a read-only
+    DOM probe on ``flow.google.com`` before the result is classified as stale.
     Fail-closed: any failure yields VERIFICATION_ERROR, never AUTHENTICATED.
     """
     _validate_profile_in_home(profile_dir)
@@ -348,6 +504,7 @@ async def verify_flow_profile(
     try:
         status_code, body, google_session = await fetch_flow_session_httpx(profile_dir)
 
+    # The next classification may need the migrated-host DOM fallback.
     # #796: the marker gate is local profile state, not a network fault. It was
     # flattened into VERIFICATION_ERROR, whose remediation says "check network
     # connectivity" — wrong advice, and specifically wrong on a profile whose
@@ -377,6 +534,17 @@ async def verify_flow_profile(
         google_session=google_session,
         source=source,
     )
+    if result.outcome is FlowSessionOutcome.GOOGLE_SESSION_ONLY:
+        # The migrated frontend uses Google SSO on flow.google.com; its account
+        # shell is the only usable oracle once the labs BFF returns `{}`.
+        migrated = await _verify_migrated_profile(
+            profile_dir,
+            google_session=google_session,
+            source=source,
+        )
+        if migrated is not None and migrated.authenticated:
+            logger.info("auth_flow_migrated_session_verified", source=source, probe="dom")
+            return migrated
     if result.outcome is FlowSessionOutcome.VERIFICATION_ERROR:
         # Observable durability signal — distinguishes a moved/changed endpoint
         # from a flaky link. The status code is safe to log; the body is not.

@@ -162,6 +162,10 @@ class ClassicFlowUiDriver:
         await VideoGenerationMixin._select_video_aspect(  # type: ignore[reportPrivateUsage]
             page, request.aspect
         )
+        if request.resolution is not None:
+            await VideoGenerationMixin._select_video_resolution(  # type: ignore[reportPrivateUsage]
+                page, request.resolution.value, out_dir=out_dir
+            )
         await VideoGenerationMixin._set_output_count(  # type: ignore[reportPrivateUsage]
             page, request.count, out_dir=out_dir
         )

@@ -56,6 +56,20 @@ def test_persistent_context_kwargs_are_unchanged(tmp_path: Path) -> None:
     assert kwargs["channel"] is None
 
 
+def test_background_mode_defaults_to_headless(tmp_path: Path) -> None:
+    client = FlowApiClient(profile_dir=tmp_path, background=True)
+    kwargs = client._persistent_context_kwargs()  # noqa: SLF001
+    assert kwargs["headless"] is True
+
+
+def test_background_mode_headed_is_minimized_and_offscreen(tmp_path: Path) -> None:
+    client = FlowApiClient(profile_dir=tmp_path, headless=False, background=True)
+    kwargs = client._persistent_context_kwargs()  # noqa: SLF001
+    assert kwargs["headless"] is False
+    assert "--start-minimized" in kwargs["args"]
+    assert "--window-position=20000,20000" in kwargs["args"]
+
+
 def test_persistent_context_kwargs_omits_har_path_when_unset(tmp_path: Path) -> None:
     """No GFLOW_CLI_HAR_PATH -> no record_har_path key at all (not just None)."""
     client = FlowApiClient(profile_dir=tmp_path, headless=True)
