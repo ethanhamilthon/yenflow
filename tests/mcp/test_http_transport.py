@@ -82,7 +82,7 @@ async def test_serve_speaks_streamable_http(tmp_path) -> None:
         async with streamable_http_client(url) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
                 init = await asyncio.wait_for(session.initialize(), timeout=30)
-                assert init.server_info.name == "gflow-cli"
+                assert init.server_info.name in {"gflow-cli", "yenflow"}
 
                 tools = await asyncio.wait_for(session.list_tools(), timeout=30)
                 tool_names = {t.name for t in tools.tools}

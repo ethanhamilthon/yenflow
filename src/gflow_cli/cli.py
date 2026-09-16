@@ -547,6 +547,7 @@ def _activate_no_spend(no_spend: bool) -> None:
 )
 @_no_spend_option
 def mcp_run(profile: str | None, no_spend: bool) -> None:
+    os.environ.setdefault("YENFLOW_STATELESS", "1")
     """Start the MCP server over stdio transport.
 
     Use this with Claude Desktop, Cursor, or other MCP-aware clients.
@@ -645,6 +646,7 @@ def mcp_setup(target: str) -> None:
 )
 @_no_spend_option
 def serve(port: int, host: str, profile: str | None, transport: str, no_spend: bool) -> None:
+    os.environ.setdefault("YENFLOW_STATELESS", "1")
     """Start the gflow MCP server over HTTP.
 
     \b

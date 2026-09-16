@@ -18,7 +18,6 @@ import base64
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 import uuid
@@ -85,7 +84,12 @@ from gflow_cli.api.video import (
 )
 from gflow_cli.api.video_extend import ExtendStarted
 from gflow_cli.auth.internal_chromium import GOOGLE_REJECTED_BROWSER_ROUTE
-from gflow_cli.browser_manager import channel_for_profile
+from gflow_cli.browser_manager import (
+    background_chrome_args,
+    capture_front_app,
+    channel_for_profile,
+    restore_front_app,
+)
 from gflow_cli.config import BrowserEngine, Settings
 from gflow_cli.diagnostics import IncidentRecorder, run_retention, validated_incidents_root
 from gflow_cli.errors import (
@@ -528,8 +532,9 @@ class FlowApiClient:
         if self.background and not self.headless:
             # Headed-but-minimized keeps Flow's own timers/network observers alive
             # without stealing the operator's foreground window.
-            kwargs["args"].append("--start-minimized")
-            kwargs["args"].append("--window-position=20000,20000")
+            for arg in background_chrome_args():
+                if arg not in kwargs["args"]:
+                    kwargs["args"].append(arg)
         if self.settings.har_path is not None:
             self.settings.har_path.parent.mkdir(parents=True, exist_ok=True)
             kwargs["record_har_path"] = str(self.settings.har_path)
@@ -1107,34 +1112,12 @@ class FlowApiClient:
         """Launch the persistent context; translate a launch-time crash into ProfileLockedError."""
         assert self._pw is not None
         front_app: str | None = None
-        if self.background and not self.headless and sys.platform == "darwin":
-            try:
-                script = (
-                    'tell application "System Events" to get name of first process whose '
-                    "frontmost is true"
-                )
-                proc = subprocess.run(
-                    ["osascript", "-e", script],
-                    capture_output=True,
-                    text=True,
-                    timeout=1.0,
-                    check=False,
-                )
-                front_app = proc.stdout.strip() or None
-            except Exception:
-                pass
+        if not self.headless and sys.platform == "darwin":
+            front_app = capture_front_app()
         try:
             ctx = await self._pw.chromium.launch_persistent_context(**kwargs)
-            if front_app and sys.platform == "darwin":
-                try:
-                    subprocess.run(
-                        ["osascript", "-e", f'tell application "{front_app}" to activate'],
-                        capture_output=True,
-                        timeout=1.0,
-                        check=False,
-                    )
-                except Exception:
-                    pass
+            if front_app:
+                restore_front_app(front_app)
             return ctx
         except Exception as exc:
             if _is_target_closed(exc):
@@ -2241,6 +2224,17 @@ class FlowApiClient:
             workflow_id=workflow_id,
             model_key=model_key,
             unit_cost=unit_cost,
+        )
+
+    async def check_video_status(self, media_id: str, *, project_id: str) -> VideoStatus:
+        """Query batchCheckAsyncVideoGenerationStatus once for media_id without polling."""
+        resp = await self._post_json(
+            routes.CHECK_VIDEO_STATUS,
+            {"media": [{"name": media_id, "projectId": project_id}]},
+            route_name="batchCheckAsyncVideoGenerationStatus",
+        )
+        return parse_video_status(
+            cast("JsonObject", resp) if isinstance(resp, dict) else {}, media_id=media_id
         )
 
     async def poll_video_status(

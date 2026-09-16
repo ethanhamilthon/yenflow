@@ -59,7 +59,7 @@ def test_required_top_level_fields_are_present(server: dict[str, Any]) -> None:
 def test_name_matches_the_schema_pattern(server: dict[str, Any]) -> None:
     """Exactly one slash, and the namespace must be the GitHub one we authenticate as."""
     assert _NAME_PATTERN.match(server["name"]), server["name"]
-    assert server["name"] == "io.github.ffroliva/gflow-cli"
+    assert server["name"] == "io.github.ethanhamilthon/yenflow"
 
 
 def test_description_is_within_the_schema_cap(server: dict[str, Any]) -> None:
@@ -122,7 +122,7 @@ def test_readme_carries_the_ownership_token(server: dict[str, Any]) -> None:
 
 def test_repository_points_at_this_project(server: dict[str, Any]) -> None:
     assert server["repository"]["source"] == "github"
-    assert server["repository"]["url"] == "https://github.com/ffroliva/gflow-cli"
+    assert server["repository"]["url"] == "https://github.com/ethanhamilthon/yenflow"
 
 
 def test_declared_environment_variables_are_real_settings(package: dict[str, Any]) -> None:

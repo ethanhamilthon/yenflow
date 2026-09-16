@@ -195,6 +195,9 @@ def _guarded(
     return wrapper
 
 
+guarded = _guarded
+
+
 def _resolve_and_validate_profile(profile: str) -> str | dict[str, Any]:
     """Resolve the requested profile name using the same precedence as the CLI.
 
@@ -1313,7 +1316,8 @@ async def gflow_character_list(
     settings = get_settings()
     async with FlowApiClient(
         profile_dir=settings.profile_subdir(resolved),
-        headless=settings.headless,
+        headless=True,
+        background=True,
     ) as client:
         chars = await client.list_characters(project)
 
@@ -1396,7 +1400,8 @@ async def gflow_character_show(
     settings = get_settings()
     async with FlowApiClient(
         profile_dir=settings.profile_subdir(resolved),
-        headless=settings.headless,
+        headless=True,
+        background=True,
     ) as client:
         char = await client.get_character(project, entity_id=entity_id, name=name)
 
@@ -1674,7 +1679,11 @@ async def _run_instructions_op(
     profile_dir = settings.profile_subdir(resolved)
     log.info("mcp.tool.instructions", tool=tool, project=project, profile=resolved)
     try:
-        async with FlowApiClient(profile_dir=profile_dir, headless=settings.headless) as client:
+        async with FlowApiClient(
+            profile_dir=profile_dir,
+            headless=True,
+            background=True,
+        ) as client:
             # ValueError is scoped to op() ONLY — brief.find (not-found /
             # ambiguous) and AgentInstruction invariants raise it with
             # user-facing messages built from the caller's own card data. A

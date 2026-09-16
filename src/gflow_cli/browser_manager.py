@@ -56,9 +56,11 @@ _find_chrome_binary() -> str
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -370,3 +372,71 @@ def ensure_profile_engine_compatible(profile_dir: Path, channel: str | None) -> 
     # Remedy lives in ProfileEngineDowngradeError._default_remediation — naming
     # it here too printed the remedy twice in the CLI human output.
     raise ProfileEngineDowngradeError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Silent background / focus preservation helpers
+# ---------------------------------------------------------------------------
+
+
+def capture_front_app() -> str | None:
+    """Capture the frontmost macOS application name so focus can be restored."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to get name of first process '
+                "whose frontmost is true",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=0.8,
+            check=False,
+        )
+        name = proc.stdout.strip()
+        if name and name not in {"Google Chrome", "Chromium"}:
+            return name
+    except Exception:
+        pass
+    return None
+
+
+def restore_front_app(front_app: str | None) -> None:
+    """Restore focus to the previously active application, combating delayed window activations."""
+    if not front_app or sys.platform != "darwin":
+        return
+
+    def _activate() -> None:
+        try:
+            subprocess.run(
+                ["osascript", "-e", f'tell application "{front_app}" to activate'],
+                capture_output=True,
+                timeout=0.8,
+                check=False,
+            )
+        except Exception:
+            pass
+
+    _activate()
+
+    async def _delayed_restore() -> None:
+        for delay in (0.1, 0.25, 0.5, 0.8):
+            await asyncio.sleep(delay)
+            _activate()
+
+    try:
+        asyncio.create_task(_delayed_restore())
+    except RuntimeError:
+        pass
+
+
+def background_chrome_args() -> list[str]:
+    """Browser arguments that suppress window prominence and position Chrome off-screen."""
+    return [
+        "--start-minimized",
+        "--window-position=20000,20000",
+        "--no-default-browser-check",
+    ]

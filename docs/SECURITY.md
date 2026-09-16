@@ -312,7 +312,7 @@ Controls:
 
 | Issue type | How |
 |---|---|
-| **Security vulnerability** (RCE, auth bypass, secret leak in logs/output) | Email <ffroliva@gmail.com> with `gflow-cli SECURITY` in the subject. **Do not** open a public GitHub issue. PGP key available on request. |
+| **Security vulnerability** (RCE, auth bypass, secret leak in logs/output) | Report privately via GitHub Security Advisories at https://github.com/ethanhamilthon/yenflow/security/advisories/new. **Do not** open a public GitHub issue. |
 | **Suspected supply-chain compromise** | Email + open a private GitHub Security Advisory at <https://github.com/ffroliva/gflow-cli/security/advisories/new>. |
 | **Functional bug** (something just broke) | Public issue at <https://github.com/ffroliva/gflow-cli/issues> — include error output, OS, Python version. |
 | **Documentation issue** (this page is wrong / unclear) | PR welcome. |

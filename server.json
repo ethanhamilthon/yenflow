@@ -1,19 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ffroliva/gflow-cli",
-  "title": "gflow-cli",
-  "description": "Drive Google Flow from an agent: Veo video and Imagen image generation",
+  "name": "io.github.ethanhamilthon/yenflow",
+  "title": "yenflow",
+  "description": "Stateless MCP server for Google Flow: Veo video and Imagen generation",
   "version": "0.75.0",
-  "websiteUrl": "https://ffroliva.github.io/gflow-cli/",
+  "websiteUrl": "https://github.com/ethanhamilthon/yenflow",
   "repository": {
-    "url": "https://github.com/ffroliva/gflow-cli",
+    "url": "https://github.com/ethanhamilthon/yenflow",
     "source": "github"
   },
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
-      "identifier": "gflow-cli",
+      "identifier": "yenflow",
       "version": "0.75.0",
       "runtimeHint": "uvx",
       "transport": {
@@ -32,7 +32,7 @@
       "environmentVariables": [
         {
           "name": "GFLOW_CLI_HOME",
-          "description": "Where gflow keeps its Chrome profile, config and database. Defaults to a per-user directory.",
+          "description": "Where yenflow keeps its Chrome profile and config. Defaults to a per-user directory.",
           "isRequired": false,
           "isSecret": false
         }

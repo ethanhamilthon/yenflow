@@ -113,7 +113,7 @@ def test_plugin_version_tracks_pyproject(plugin: dict[str, Any], version: str) -
 def test_plugin_declares_identity_a_stranger_can_check(plugin: dict[str, Any]) -> None:
     assert plugin["name"] == "gflow"
     assert plugin["license"] == "MIT"
-    assert plugin["repository"] == "https://github.com/ffroliva/gflow-cli"
+    assert plugin["repository"] == "https://github.com/ethanhamilthon/yenflow"
     assert plugin["description"].strip()
 
 

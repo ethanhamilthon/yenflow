@@ -154,7 +154,7 @@ class FlowWorker:
 
         settings = get_settings()
         profile_dir = settings.profile_subdir(task.profile_name)
-        headless = task.payload.get("headless", settings.headless)
+        headless = task.payload.get("headless", True)
         transport = task.payload.get("transport", settings.transport)
         out_dir = (
             Path(task.payload["out_dir"]) if "out_dir" in task.payload else settings.output_dir
@@ -183,6 +183,7 @@ class FlowWorker:
                     async with FlowApiClient(
                         profile_dir=profile_dir,
                         headless=headless,
+                        background=True,
                         transport=transport,
                         out_dir=out_dir,
                         # Reuse the cached settings: a bare Settings() in the client
@@ -324,6 +325,7 @@ class FlowWorker:
                     async with FlowApiClient(
                         profile_dir=profile_dir,
                         headless=headless,
+                        background=True,
                         transport=transport,
                         out_dir=out_dir,
                         settings=settings,  # same rationale as the image path above

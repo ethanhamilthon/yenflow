@@ -1,11 +1,11 @@
 [project]
-name = "gflow-cli"
+name = "yenflow"
 version = "0.75.0"
-description = "CLI and MCP server for Google Flow — drive Veo text-to-video, image-to-video and Imagen image generation from the terminal."
+description = "Stateless Model Context Protocol (MCP) server for Google Flow — drive Veo video and Imagen generation."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
-authors = [{ name = "Flavio Oliva", email = "ffroliva@gmail.com" }]
+authors = [{ name = "Yenflow Maintainers" }]
 # PyPI search matches on these, and every downstream catalog copies the summary
 # above verbatim. Both previously described only image-to-video and never
 # mentioned MCP, which is half of what this package is.
@@ -136,31 +136,23 @@ patchright = [
 ]
 
 [project.scripts]
+yenflow = "yenflow.cli:main"
+yenflow-mcp = "gflow_cli.mcp.server:main_stdio"
 gflow = "gflow_cli.cli:main"
 flow = "gflow_cli.cli:main"
-# Third alias, and it earns its keep: `uvx <name>` runs the console script whose
-# name matches the *package*, so without this `uvx gflow-cli mcp run` fails with
-# uv's own "Use `uvx --from gflow-cli <EXECUTABLE-NAME>` instead" (verified against
-# 0.74.0). The MCP registry's server.json builds exactly that `uvx <identifier>`
-# command from the PyPI identifier and has no field for a differing executable
-# name, so a listing without this alias would be broken on arrival. It is also
-# what a user types first, the package being what they just installed.
 gflow-cli = "gflow_cli.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ffroliva/gflow-cli"
-Documentation = "https://ffroliva.github.io/gflow-cli/"
-Repository = "https://github.com/ffroliva/gflow-cli"
-Changelog = "https://github.com/ffroliva/gflow-cli/blob/main/CHANGELOG.md"
-Issues = "https://github.com/ffroliva/gflow-cli/issues"
-Funding = "https://github.com/sponsors/ffroliva"
+Homepage = "https://github.com/ethanhamilthon/yenflow"
+Repository = "https://github.com/ethanhamilthon/yenflow"
+Issues = "https://github.com/ethanhamilthon/yenflow/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gflow_cli"]
+packages = ["src/gflow_cli", "src/yenflow"]
 
 [tool.ruff]
 line-length = 100

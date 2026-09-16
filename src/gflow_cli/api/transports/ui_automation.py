@@ -1078,8 +1078,11 @@ class UiAutomationTransport(VideoGenerationMixin):
             import os
 
             from gflow_cli.browser_manager import (
+                background_chrome_args,
+                capture_front_app,
                 channel_for_profile,
                 ensure_profile_engine_compatible,
+                restore_front_app,
             )
 
             # Own the profile BEFORE Chrome launches (D3). Contention raises
@@ -1092,18 +1095,22 @@ class UiAutomationTransport(VideoGenerationMixin):
             # #477: refuse a bundled-Chromium open of a profile last written by
             # a newer Chromium — downgrade cleanup can shred the session store.
             ensure_profile_engine_compatible(profile_dir, channel)
+            front_app = capture_front_app()
+            args = [
+                "--disable-blink-features=AutomationControlled",
+                "--password-store=basic",
+                "--disable-dev-shm-usage",
+            ] + background_chrome_args()
             ctx = await pw.chromium.launch_persistent_context(
                 str(profile_dir),
                 headless=False,
                 viewport=cast("ViewportSize", _VIEWPORT),
                 locale=locale_env,
                 channel=channel,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--password-store=basic",
-                    "--disable-dev-shm-usage",
-                ],
+                args=args,
             )
+            if front_app:
+                restore_front_app(front_app)
             # Hide the automation flag so reCAPTCHA Enterprise doesn't score
             # the session as a bot — navigator.webdriver=true causes low-score
             # tokens and HTTP 403 on batchGenerateImages.

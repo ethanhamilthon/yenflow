@@ -1,23 +1,23 @@
 # CODEOWNERS — https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
 # These owners are automatically requested for review on every PR that touches
-# the matched paths. Ownership does not prevent external contributors from
-# opening PRs — it ensures a maintainer is always in the review loop.
+# the matched paths.
 
 # Global fallback — everything not matched below
-*                       @ffroliva
+*                       @maintainers
 
 # Core source
-/src/                   @ffroliva
+/src/                   @maintainers
 
 # CI and security gates — changes here require extra care
-/.github/               @ffroliva
-/scripts/ci/            @ffroliva
-/.pre-commit-config.yaml @ffroliva
-/.gitleaks.toml         @ffroliva
-/.secrets.baseline      @ffroliva
-/.gitignore             @ffroliva
+/.github/               @maintainers
+/scripts/ci/            @maintainers
+/.pre-commit-config.yaml @maintainers
+/.gitleaks.toml         @maintainers
+/.secrets.baseline      @maintainers
+/.gitignore             @maintainers
 
-# Auth handling — sensitive, never bypass review
-/src/gflow_cli/auth.py  @ffroliva
-/src/gflow_cli/auth/    @ffroliva
+# Auth handling
+/src/gflow_cli/auth.py  @maintainers
+/src/gflow_cli/auth/    @maintainers
+

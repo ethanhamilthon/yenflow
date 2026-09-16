@@ -663,10 +663,31 @@ class Settings(BaseSettings):
         description="Port for the FastAPI daemon server. Default is 8000.",
     )
 
+    stateless: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "YENFLOW_STATELESS",
+            "GFLOW_CLI_STATELESS",
+            "GFLOW_STATELESS",
+        ),
+        description=(
+            "Run in stateless mode with ephemeral database storage in system temp, "
+            "preventing any persistent SQLite database creation in user home."
+        ),
+    )
+
     # --- derived path helpers --------------------------------------------
 
     def resolved_db_path(self) -> Path:
-        return self.db_path or paths.database_path(self.home)
+        if self.db_path is not None:
+            return self.db_path
+        if self.stateless:
+            import tempfile
+
+            ephemeral_dir = Path(tempfile.gettempdir()) / f"yenflow_stateless_{os.getpid()}"
+            ephemeral_dir.mkdir(parents=True, exist_ok=True)
+            return ephemeral_dir / "stateless.db"
+        return paths.database_path(self.home)
 
     def profile_subdir(self, name: str) -> Path:
         return paths.profile_subdir(self.home, name)

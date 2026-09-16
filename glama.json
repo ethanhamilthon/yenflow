@@ -8,7 +8,7 @@
   "cmdArguments": [
     "mcp-proxy",
     "--",
-    "/app/.venv/bin/gflow",
+    "/app/.venv/bin/yenflow",
     "mcp",
     "run"
   ],

@@ -3,8 +3,8 @@
 Operating guidelines and strict invariants for AI agents working in this repository.
 
 ## 1. Project Location & Scope
-- **Working Directory**: Strictly `/Users/erdana/pi/yenflow` (or subdirectories of `~/pi`).
-- **Internal Core**: Private TOML-driven Flow I2V batch runner (`src/gflow_cli/flow_batch.py`). Do not expose new public Click CLI commands or MCP tools.
+- **Working Directory**: Project root (`yenflow`).
+- **MCP Core**: Stateless Model Context Protocol (MCP) server for Google Flow (Veo video and Imagen image generation). All state is held by the MCP client.
 
 ## 2. Project Defaults
 - **Video Model**: `omni_flash` (Omni 1.1 Flash)
@@ -18,18 +18,19 @@ Operating guidelines and strict invariants for AI agents working in this reposit
 - User focus must never be stolen from their active application.
 
 ## 4. Credit & Execution Safety
-- **Two-Phase Credit Lock**: Generating paid video requires preparing `plan.json` (calculating credits and SHA-256 hash) and verifying matching `approval.json` (`{"approved": true, "plan_sha256": "..."}`).
-- **Idempotent Reconciliation**: Checkpoints are persisted before submit (`submit_attempted`) and upon handle discovery (`remote_started`). If a connection drops, poll by `media_id` — never blindly resubmit.
-- **Queue Limits**: Max 10 queued, max 5 active (FIFO). Pause/cancel applies only to pending scenes.
+- **Two-Phase Credit Lock**: Generating paid video requires preparing a plan (calculating credits and SHA-256 hash) and verifying matching client approval (`{"approved": true, "plan_sha256": "..."}`).
+- **Stateless Orchestration**: The MCP client orchestrates and tracks scenes, media IDs, and batch state. The server remains stateless and requires no local database.
+- **Queue Limits**: Max 10 queued, max 5 active (FIFO).
 - **Technical Retries**: At most 1 automatic retry on preflight errors; creative retries require explicit approval.
 
 ## 5. Quality & Verification Gates
 Before committing any changes, run:
 ```bash
-.venv/bin/ruff check src/gflow_cli tests
-.venv/bin/ruff format --check src/gflow_cli tests
-.venv/bin/pyright --pythonpath .venv/bin/python src/gflow_cli
-.venv/bin/pytest -q tests/auth/test_verification.py tests/api/test_video_request.py tests/api/test_client_launch_kwargs.py tests/api/transports/test_ui_automation_video.py tests/api/transports/test_migrated_composer.py tests/test_flow_batch.py
+.venv/bin/ruff check src tests
+.venv/bin/ruff format --check src tests
+.venv/bin/pyright --pythonpath .venv/bin/python src
+.venv/bin/pytest -q tests/auth/test_verification.py tests/api/test_video_request.py tests/api/test_client_launch_kwargs.py tests/api/transports/test_ui_automation_video.py tests/api/transports/test_migrated_composer.py tests/test_flow_batch.py tests/mcp
 .venv/bin/gflow doctor
 ```
 All checks must pass with 0 errors/warnings.
+

@@ -1,8 +1,8 @@
 {
   "name": "gflow-cli",
   "owner": {
-    "name": "Flavio Oliva",
-    "url": "https://github.com/ffroliva"
+    "name": "Yenflow Maintainers",
+    "url": "https://github.com/yenflow"
   },
   "description": "Drive Google Flow (Veo video, Imagen images) from Claude Code.",
   "plugins": [

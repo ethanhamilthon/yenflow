@@ -498,10 +498,16 @@ def run_all(db_path: Path, settings: Settings) -> DoctorReport:
     )
     header_is_wal = _db_header_is_wal(db_path)
     store: DataStore | None = None
-    try:
-        store = DataStore.open_readonly(db_path)
-    except DataStoreError:
-        store = None  # per-DB checks degrade to fail findings via _require
+    if not db_path.exists() and settings.stateless:
+        try:
+            store = DataStore.open(db_path)
+        except Exception:
+            store = None
+    else:
+        try:
+            store = DataStore.open_readonly(db_path)
+        except DataStoreError:
+            store = None  # per-DB checks degrade to fail findings via _require
 
     try:
         conn = store.conn if store is not None else None

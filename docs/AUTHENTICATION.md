@@ -95,7 +95,7 @@ profile_ffroliva/
 └── (lots of other Chromium files we don't care about)
 ```
 
-`.gflow_account` contains the plain email address (`ffroliva@gmail.com`) and is
+`.gflow_account` contains the plain email address (`you@gmail.com`) and is
 written by `gflow auth login` immediately after the session is verified. It is the
 source of truth for "which Google account is this profile signed into?", surfaced by
 `gflow auth list` and `profile_store.list_profiles()`.
@@ -165,7 +165,7 @@ If nothing usable remains, the profile keeps the name `default`.
 ```text
 $ gflow auth login
 Launching real Chrome...
-[OK] Flow session verified (ffroliva@gmail.com).
+[OK] Flow session verified (you@gmail.com).
 Session saved. Profile dir: …/profile_ffroliva
 Renamed profile from default to ffroliva (derived from Google account).
 Set ffroliva as default profile.
@@ -254,7 +254,7 @@ $ gflow auth list
 Profiles in /home/you/.local/share/gflow-cli
 
   Default  Name       Google account          Session   Last used (UTC)        Profile dir
-    ●      ffroliva   ffroliva@gmail.com       present   2026-05-28 10:14:22    …/profile_ffroliva
+    ●      default    you@gmail.com            present   2026-05-28 10:14:22    …/profile_default
            work       alice@work.example.com   present   2026-05-27 08:30:01    …/profile_work
            old        unknown                  missing   -                      …/profile_old
 ```
@@ -267,7 +267,7 @@ until `gflow auth login` is re-run against them — the file is written on every
 
 ```bash
 $ gflow auth list --json | jq '.[] | {name, google_account}'
-{"name": "ffroliva", "google_account": "ffroliva@gmail.com"}
+{"name": "default", "google_account": "you@gmail.com"}
 {"name": "work",     "google_account": "alice@work.example.com"}
 {"name": "old",      "google_account": null}
 ```
@@ -357,8 +357,8 @@ from a sandbox one.
 
 ```
 Default  Name           Google account           Session
-  ●      ffroliva       ffroliva@gmail.com        present
-         sandbox        ffroliva@gmail.com        present   ← same account, different dir
+  ●      default        you@gmail.com             present
+         sandbox        you@gmail.com             present   ← same account, different dir
          work           alice@work.example.com    present
 ```
 

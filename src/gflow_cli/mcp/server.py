@@ -34,7 +34,7 @@ log = structlog.get_logger()
 # Server instance
 # ---------------------------------------------------------------------------
 
-_SERVER_NAME = "gflow-cli"
+_SERVER_NAME = "yenflow"
 _SERVER_VERSION = __version__
 
 #: Streamable-HTTP mount path. ``/mcp`` is the SDK and ecosystem default.
@@ -123,7 +123,19 @@ def _configure_utf8_pipes() -> None:
 # Credit-spending tools gated by --no-spend (#496). BOTH generate tools:
 # image generation is only *empirically* free ("~0 credits observed") and
 # no-spend must be a hard guarantee, so anything not contractually free is in.
-_SPEND_TOOLS = ("gflow_generate_image", "gflow_generate_video")
+_SPEND_TOOLS = (
+    "gflow_generate_image",
+    "gflow_generate_video",
+    "flow_generate_scene",
+    "flow_submit_scene",
+    "yenflow_generate_scene",
+    "yenflow_submit_scene",
+)
+
+
+def _activate_stateless_mode() -> None:
+    """Ensure MCP server operates completely statelessly with zero persistent DB on disk."""
+    os.environ.setdefault("YENFLOW_STATELESS", "1")
 
 
 def no_spend_active() -> bool:
@@ -172,10 +184,11 @@ def _register_surfaces() -> None:
     """
     from gflow_cli.mcp import prompts as _prompts
     from gflow_cli.mcp import resources as _resources
+    from gflow_cli.mcp import stateless_batch as _stateless_batch
     from gflow_cli.mcp import tools as _tools
 
     # Access them to satisfy pyright unused import check
-    _ = (_prompts, _resources, _tools)
+    _ = (_prompts, _resources, _tools, _stateless_batch)
     _apply_no_spend_policy()
 
 
@@ -304,6 +317,7 @@ async def run_stdio() -> None:
     import anyio
     from mcp.server.stdio import stdio_server
 
+    _activate_stateless_mode()
     _configure_utf8_pipes()
 
     # Capture the REAL stdout for the JSON-RPC channel BEFORE redirecting
@@ -350,6 +364,7 @@ async def run_http(host: str = "127.0.0.1", port: int = 8000) -> None:
         host: Bind address. Defaults to localhost-only for security.
         port: Port number. Defaults to 8000.
     """
+    _activate_stateless_mode()
     _configure_utf8_pipes()
 
     token = _daemon_token()
@@ -385,6 +400,7 @@ async def run_sse(host: str = "127.0.0.1", port: int = 8000) -> None:
         host: Bind address. Defaults to localhost-only for security.
         port: Port number. Defaults to 8000.
     """
+    _activate_stateless_mode()
     _configure_utf8_pipes()
 
     token = _daemon_token()

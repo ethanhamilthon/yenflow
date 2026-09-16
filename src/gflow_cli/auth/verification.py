@@ -358,12 +358,17 @@ async def _verify_migrated_profile(
     except OSError:
         pass
     try:
-        from gflow_cli.browser_manager import ensure_profile_engine_compatible
+        from gflow_cli.browser_manager import (
+            capture_front_app,
+            ensure_profile_engine_compatible,
+            restore_front_app,
+        )
 
         from .strategies import async_playwright
 
         async with ProfileLease(profile_dir):
             ensure_profile_engine_compatible(profile_dir, channel)
+            front_app = capture_front_app()
             async with async_playwright() as pw:
                 ctx = await pw.chromium.launch_persistent_context(
                     user_data_dir=str(profile_dir),
@@ -371,6 +376,8 @@ async def _verify_migrated_profile(
                     headless=True,
                     args=["--password-store=basic"],
                 )
+                if front_app:
+                    restore_front_app(front_app)
                 try:
                     page = ctx.pages[0] if ctx.pages else await ctx.new_page()
                     await page.goto(MIGRATED_APP_URL, wait_until="domcontentloaded", timeout=60_000)
@@ -432,7 +439,11 @@ async def verify_flow_session(
     status_code: int
     body: str
     try:
-        from gflow_cli.browser_manager import ensure_profile_engine_compatible
+        from gflow_cli.browser_manager import (
+            capture_front_app,
+            ensure_profile_engine_compatible,
+            restore_front_app,
+        )
 
         # Own the profile for this headless probe context (D3). Lease is the
         # OUTER context so it releases only after the driver stops. Contention
@@ -444,6 +455,7 @@ async def verify_flow_session(
             # must not trigger downgrade cleanup either. Inside the
             # fail-closed wrapper, so the refusal maps to VERIFICATION_ERROR.
             ensure_profile_engine_compatible(profile_dir, channel)
+            front_app = capture_front_app()
             async with async_playwright() as pw:
                 ctx = await pw.chromium.launch_persistent_context(
                     user_data_dir=str(profile_dir),
@@ -451,6 +463,8 @@ async def verify_flow_session(
                     headless=True,
                     args=["--password-store=basic"],
                 )
+                if front_app:
+                    restore_front_app(front_app)
                 try:
                     cookies = await ctx.cookies()
                     google_session = any(c.get("name") == "SAPISID" for c in cookies)

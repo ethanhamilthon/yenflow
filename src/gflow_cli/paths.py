@@ -30,7 +30,7 @@ from platformdirs import user_data_dir, user_downloads_dir
 _SAFE_ID_RE = re.compile(r"^[\w\-]{1,128}$")
 
 APP_NAME = "gflow-cli"
-APP_AUTHOR = "ffroliva"  # Windows-only; Linux/macOS ignore this.
+APP_AUTHOR = "yenflow"  # Windows-only; Linux/macOS ignore this.
 
 
 def default_home() -> Path:

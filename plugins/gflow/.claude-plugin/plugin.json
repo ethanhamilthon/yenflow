@@ -4,11 +4,11 @@
   "version": "0.75.0",
   "description": "Drive Google Flow from your agent: Veo text-to-video, image-to-video and clip extension, Imagen images, reusable Characters and scene composition.",
   "author": {
-    "name": "Flavio Oliva",
-    "url": "https://github.com/ffroliva"
+    "name": "Yenflow Maintainers",
+    "url": "https://github.com/ethanhamilthon"
   },
-  "homepage": "https://ffroliva.github.io/gflow-cli/",
-  "repository": "https://github.com/ffroliva/gflow-cli",
+  "homepage": "https://github.com/ethanhamilthon/yenflow",
+  "repository": "https://github.com/ethanhamilthon/yenflow",
   "license": "MIT",
   "keywords": [
     "google-flow",

@@ -726,7 +726,7 @@ class TestProtocolEras:
             # than papering over the difference.
             if mode == "legacy":
                 assert client.server_info is not None
-                assert client.server_info.name == "gflow-cli"
+                assert client.server_info.name in {"gflow-cli", "yenflow"}
             else:
                 assert client.server_info is None
 
