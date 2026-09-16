@@ -279,10 +279,12 @@ class BatchManifest:
         if mode_value != Mode.I2V.value:
             raise BatchManifestError("flow.mode must be 'i2v' in Phase A")
         try:
-            model = VideoModel.from_cli(_required_string(flow_doc.get("model"), "flow.model"))
+            model = VideoModel.from_cli(
+                _required_string(flow_doc.get("model", "omni_flash"), "flow.model")
+            )
             aspect = Aspect.from_cli(_required_string(flow_doc.get("aspect"), "flow.aspect"))
             resolution = VideoResolution.from_cli(
-                _required_string(flow_doc.get("resolution"), "flow.resolution")
+                _required_string(flow_doc.get("resolution", "360p"), "flow.resolution")
             )
         except ValueError as exc:
             raise BatchManifestError(str(exc)) from exc

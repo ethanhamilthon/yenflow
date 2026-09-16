@@ -1,9 +1,9 @@
 [flow]
 mode = "i2v"
-model = "veo_3_1_lite"
+model = "omni_flash"
 aspect = "16:9"
 duration = 4
-resolution = "720p"
+resolution = "360p"
 count = 1
 project_id = "4d0ccaa2-8f45-4bb8-a812-e1d662575b49"
 
