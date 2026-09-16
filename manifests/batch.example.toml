@@ -1,0 +1,29 @@
+[flow]
+mode = "i2v"
+model = "omni_flash"
+aspect = "16:9"
+duration = 4
+resolution = "360p"
+count = 1
+
+[browser]
+background = true
+
+[batch]
+max_queued = 10
+max_active = 5
+poll_timeout_s = 600.0
+estimated_credits_per_scene = 1
+
+[output]
+enhance = false
+
+[[scenes]]
+id = "scene-01"
+prompt = "First scene prompt description..."
+start_frame = "frames/scene-01.png"
+
+[[scenes]]
+id = "scene-02"
+prompt = "Second scene prompt description..."
+start_frame = "frames/scene-02.png"

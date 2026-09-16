@@ -14,11 +14,8 @@ Private, headless Google Flow automation and TOML-driven Image-to-Video (I2V) ba
 
 ```text
 yenflow/
-├── manifests/          # TOML batch manifests (e.g. fox-story.toml)
-├── out/                # Canonical completed media outputs
-│   ├── four-photos/    # Preserved 16:9 fox photos
-│   ├── fox-story-frames/ # 5 story keyframes
-│   └── fox-story-video/  # Rendered clips and stitched final video
+├── manifests/          # TOML batch manifests (e.g. batch.example.toml)
+├── out/                # Exported media outputs
 ├── runs/               # Local batch executions (gitignored)
 │   └── <run-id>/       # plan.json, approval.json, state.json, report.json, clips/, final/
 └── src/gflow_cli/      # Core engine
@@ -43,7 +40,7 @@ from gflow_cli.paths import default_home, profile_subdir
 from gflow_cli.flow_batch import BatchManifest, BatchRunner
 
 async def main():
-    manifest = BatchManifest.from_path(Path("manifests/fox-story.toml"))
+    manifest = BatchManifest.from_path(Path("manifests/batch.example.toml"))
     profile = profile_subdir(default_home(), "default")
     runner = BatchRunner(manifest, profile_dir=profile, run_dir=Path("runs/batch-01"))
 
@@ -62,7 +59,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### 3. Manifest Example (`manifests/fox-story.toml`)
+### 3. Manifest Example (`manifests/batch.example.toml`)
 ```toml
 [flow]
 mode = "i2v"
@@ -71,7 +68,6 @@ aspect = "16:9"
 duration = 4
 resolution = "360p"
 count = 1
-project_id = "4d0ccaa2-8f45-4bb8-a812-e1d662575b49"
 
 [browser]
 background = true
@@ -87,8 +83,13 @@ enhance = false
 
 [[scenes]]
 id = "scene-01"
-prompt = "The red fox wakes up on a mossy log in an autumn forest..."
-start_frame = "../out/fox-story-frames/scene-01.jpg"
+prompt = "First scene prompt description..."
+start_frame = "frames/scene-01.png"
+
+[[scenes]]
+id = "scene-02"
+prompt = "Second scene prompt description..."
+start_frame = "frames/scene-02.png"
 ```
 
 ## Invariants & Safety
